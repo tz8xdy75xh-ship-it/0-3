@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>メルカリ風MVP v0.3</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>メルカリ風MVP v0.3</h1>
+    <nav>
+      <a href="/" class="brand">Home</a>
+      <span id="versionTag"></span>
+    </nav>
+  </header>
+  <main>
+    
+<section class="toolbar">
+  <span class="badge">v0.3：チャット / 評価 / 予約カレンダー / 信頼スコア / 簡易管理</span>
+</section>
+
+<h2>出品（新規）</h2>
+<form id="newForm">
+  <input name="title" placeholder="商品名" required />
+  <input name="price" type="number" placeholder="価格（円）" required />
+  <input name="condition" placeholder="状態（良い・普通など）" />
+  <textarea name="description" placeholder="説明"></textarea>
+  <button>出品する</button>
+</form>
+
+<h2 style="margin-top:24px">出品一覧</h2>
+<div id="list" class="grid"></div>
+
+<div id="modal" class="modal">
+  <div class="panel">
+    <div id="modalBody"></div>
+    <button id="closeModal">閉じる</button>
+  </div>
+</div>
+
+  </main>
+  <footer>
+    <small>Demo MVP — no database / in-memory only</small>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>
