@@ -1,0 +1,14 @@
+{
+  "name": "closetshare-v0-3",
+  "version": "0.3.0",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "stripe": "^12.18.0",
+    "path-to-regexp": "^6.2.2"
+  }
+}
