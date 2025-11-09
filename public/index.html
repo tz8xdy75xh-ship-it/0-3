@@ -81,7 +81,8 @@
 </nav>
 
 <script>
-const CLOUD_NAME='demo', UPLOAD_PRESET='unsigned_preset';
+const CLOUD_NAME = 'dabc12345';
+const UPLOAD_PRESET = 'rentaru_unsigned';
 let token=localStorage.getItem('token')||''; let me=null; const $=s=>document.querySelector(s);
 
 function showPage(id){ ['pageHome','pageInbox','pageChat'].forEach(x=>document.getElementById(x).style.display = (x===id)?'':'none'); document.querySelectorAll('.bottom-nav .bn-item').forEach(el=>el.classList.remove('is-active')); if(id==='pageHome') $('#navHome').classList.add('is-active'); if(id==='pageInbox') $('#navInbox').classList.add('is-active'); }
