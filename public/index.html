@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>メルカリ風レンタル v0.2</title>
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+<header class="app-header">
+  <div class="header-row">
+    <div class="logo-dot"></div>
+    <div>
+      <div class="app-title">メルカリ風レンタル</div>
+      <small style="opacity:.7">ログイン／出品／画像／受信箱／チャット／決済</small>
+    </div>
+  </div>
+  <div class="search-wrap">
+    <div class="search-bar">
+      <input class="search-input" id="q" placeholder="キーワードから探す" />
+      <button class="search-btn" id="btnSearch">検索</button>
+    </div>
+  </div>
+</header>
+
+<main class="container">
+  <!-- Home -->
+  <section id="pageHome">
+    <div class="card" id="authCard">
+      <div class="row" style="justify-content:space-between">
+        <div><b id="authState">未ログイン</b></div>
+        <div class="row">
+          <button class="btn ghost" id="btnOpenLogin">ログイン</button>
+          <button class="btn primary" id="btnOpenRegister">新規登録</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form" id="newForm" style="display:none">
+      <label>商品名</label><input class="input" id="title">
+      <label>価格（週・円）</label><input class="input" id="price" type="number" inputmode="numeric">
+      <label>状態</label><input class="input" id="condition" placeholder="良い・普通 など">
+      <label>説明</label><textarea class="textarea" id="description"></textarea>
+      <label>カテゴリ</label><input class="input" id="category" placeholder="ファッションなど">
+      <label>画像</label>
+      <div class="row"><input type="file" id="file" accept="image/*"><button class="btn ghost" id="btnUpload">画像アップロード</button></div>
+      <div class="space"></div><img id="preview" style="max-width:100%;border-radius:12px;display:none">
+      <div class="space"></div><button class="btn primary" id="btnCreate">出品する</button>
+    </div>
+
+    <div class="section-pill">出品一覧</div>
+    <div id="list"></div>
+  </section>
+
+  <!-- Inbox -->
+  <section id="pageInbox" style="display:none">
+    <div class="section-pill">受信箱</div>
+    <div id="inboxList"></div>
+  </section>
+
+  <!-- Chat -->
+  <section id="pageChat" style="display:none">
+    <div class="section-pill"><span id="chatTitle">チャット</span></div>
+    <div class="chat-wrap">
+      <div id="chatList" class="chat-list"></div>
+      <div class="chat-input">
+        <input id="chatText" class="input" placeholder="メッセージを入力" />
+        <button id="btnSend" class="btn primary">送信</button>
+      </div>
+      <div style="padding:8px 0">
+        <button id="btnPay" class="btn ghost">この注文を決済へ</button>
+        <button id="btnBackInbox" class="btn">戻る</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="bottom-nav">
+  <a class="bn-item is-active" id="navHome"><span>🏠</span><span>ホーム</span></a>
+  <a class="bn-item" id="navInbox"><span>✉️</span><span>受信箱</span></a>
+  <a class="bn-item" id="navProfile"><span>👤</span><span>プロフィール</span></a>
+</nav>
+
+<script>
+const CLOUD_NAME='demo', UPLOAD_PRESET='unsigned_preset';
+let token=localStorage.getItem('token')||''; let me=null; const $=s=>document.querySelector(s);
+
+function showPage(id){ ['pageHome','pageInbox','pageChat'].forEach(x=>document.getElementById(x).style.display = (x===id)?'':'none'); document.querySelectorAll('.bottom-nav .bn-item').forEach(el=>el.classList.remove('is-active')); if(id==='pageHome') $('#navHome').classList.add('is-active'); if(id==='pageInbox') $('#navInbox').classList.add('is-active'); }
+
+function setAuthState(){ $('#authState').textContent = me?`ログイン中：${me.display_name}（${me.age||'-'}歳／${me.pref||'-'}）`:'未ログイン'; $('#newForm').style.display = me?'':'none'; }
+
+async function fetchJSON(u,opt={}){ const r=await fetch(u,Object.assign({headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})}},opt)); if(!r.ok) throw new Error(await r.text()); return await r.json(); }
+async function loadMe(){ if(!token){ me=null; setAuthState(); return; } try{ me=await fetchJSON('/api/me'); }catch(e){ token=''; localStorage.removeItem('token'); me=null; } setAuthState(); }
+
+async function loadListings(){
+  const data=await fetchJSON('/api/listings');
+  const q=$('#q').value.trim().toLowerCase();
+  $('#list').innerHTML = data.filter(x=>!q||(x.title+x.description).toLowerCase().includes(q)).map(it=>`
+    <div class="card">
+      <div class="card-head">
+        <div class="card-thumb">${it.image_url?`<img src="${it.image_url}">`:''}</div>
+        <div>
+          <div class="card-title">${it.title}</div>
+          <div class="card-meta"><span class="price">¥${(it.price_per_week||0).toLocaleString()}/週</span> <span>状態:${it.condition||'-'}</span></div>
+          <div class="badges"><span class="badge">${it.category||'ファッション'}</span><span class="badge">${it.owner_pref||''}</span></div>
+        </div>
+      </div>
+      <div class="card-desc">${(it.description||'').slice(0,120)}</div>
+      ${me?`<div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn ghost" onclick="startChat(${it.id}, '${it.title.replace(/'/g,'&#39;')}')">連絡する</button>
+        <button class="btn primary" onclick="createOrder(${it.id})">予約→決済</button>
+      </div>`:''}
+    </div>`).join('');
+}
+
+async function createOrder(listing_id){
+  const order=await fetchJSON('/api/orders',{method:'POST',body:JSON.stringify({listing_id,duration_type:'week'})});
+  const r=await fetchJSON('/api/checkout',{method:'POST',body:JSON.stringify({order_id:order.id})});
+  location.href=r.url;
+}
+
+let chatOrder = null, chatPeerId = null, chatTimer = null;
+window.startChat = async (listing_id, title)=>{
+  if(!me) return alert('ログインしてね');
+  const order = await fetchJSON('/api/inbox/start',{method:'POST', body: JSON.stringify({listing_id})});
+  chatOrder = order; chatPeerId = (order.renter_id===me.id)?order.owner_id:order.renter_id;
+  $('#chatTitle').textContent = `チャット：${title}`;
+  showPage('pageChat');
+  await loadMessages(); startPolling();
+};
+function startPolling(){ if(chatTimer) clearInterval(chatTimer); chatTimer=setInterval(loadMessages, 4000); }
+async function loadMessages(){
+  if(!chatOrder) return;
+  const msgs = await fetchJSON('/api/messages?order_id='+chatOrder.id);
+  $('#chatList').innerHTML = msgs.map(m=>`<div class="msg ${m.sender_id===me.id?'mine':'their'}">${escapeHtml(m.text)}</div>`).join('');
+  const list = document.getElementById('chatList'); list.scrollTop = list.scrollHeight;
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g,c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+$('#btnSend').onclick = async ()=>{
+  const t = $('#chatText').value.trim(); if(!t) return;
+  await fetchJSON('/api/messages',{method:'POST', body: JSON.stringify({order_id: chatOrder.id, receiver_id: chatPeerId, text: t})});
+  $('#chatText').value=''; await loadMessages();
+};
+$('#btnBackInbox').onclick = ()=>{ if(chatTimer) clearInterval(chatTimer); showPage('pageInbox'); };
+$('#btnPay').onclick = async ()=>{
+  if(chatOrder.status==='inquiry'){ await fetchJSON('/api/orders/'+chatOrder.id+'/prepare_checkout',{method:'POST'}); }
+  const r=await fetchJSON('/api/checkout',{method:'POST', body: JSON.stringify({order_id: chatOrder.id})}); location.href=r.url;
+};
+
+// Inbox page
+async function loadInbox(){
+  const list = await fetchJSON('/api/inbox');
+  $('#inboxList').innerHTML = list.map(t=>`
+    <div class="thread" onclick="openThread(${t.id})">
+      <div class="avatar"></div>
+      <div>
+        <div><b>${t.peer_name||'相手'}</b> ・ <small>${t.title}</small></div>
+        <div class="meta">${(t.last_text||'(メッセージなし)')}</div>
+      </div>
+    </div>`).join('');
+}
+window.openThread = async (order_id)=>{
+  const list = await fetchJSON('/api/inbox');
+  const t = list.find(x=>x.id===order_id);
+  if(!t) return;
+  chatOrder = t; chatPeerId = (t.renter_id===me.id)?t.owner_id:t.renter_id;
+  $('#chatTitle').textContent = `チャット：${t.title}`;
+  showPage('pageChat'); await loadMessages(); startPolling();
+};
+
+// Auth UI
+$('#btnOpenLogin').onclick = ()=>{ openAuth(false); };
+$('#btnOpenRegister').onclick = ()=>{ openAuth(true); };
+function openAuth(isReg){
+  const modalHtml = document.getElementById('modalAuth');
+  if(!modalHtml){ // build once
+    const div = document.createElement('div');
+    div.id='modalAuth'; div.className='modal-backdrop';
+    div.innerHTML = `<div class="modal"><h3 id="authTitle">${isReg?'新規登録':'ログイン'}</h3><div class="form">
+      <label>メール</label><input class="input" id="authEmail"><label>パスワード</label><input class="input" id="authPassword" type="password">
+      <div id="extraFields" style="${isReg?'':'display:none'}"><label>ニックネーム</label><input class="input" id="authName"><label>年齢</label><input class="input" id="authAge" type="number"><label>都道府県</label><input class="input" id="authPref"><label>市区町村</label><input class="input" id="authCity"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn ghost" id="btnCloseAuth">閉じる</button><button class="btn primary" id="btnDoAuth">実行</button></div></div></div>`;
+    document.body.appendChild(div);
+    document.getElementById('btnCloseAuth').onclick = ()=>div.classList.remove('show');
+    document.getElementById('btnDoAuth').onclick = async ()=>{
+      const email=$('#authEmail').value.trim(); const password=$('#authPassword').value.trim();
+      if($('#authTitle').textContent.includes('新規')){
+        const display_name=$('#authName').value.trim(); const age=Number($('#authAge').value||0); const pref=$('#authPref').value.trim(); const city=$('#authCity').value.trim();
+        const res=await fetchJSON('/api/register',{method:'POST',body:JSON.stringify({email,password,display_name,age,pref,city})}); token=res.token; localStorage.setItem('token',token);
+      }else{
+        const res=await fetchJSON('/api/login',{method:'POST',body:JSON.stringify({email,password})}); token=res.token; localStorage.setItem('token',token);
+      }
+      div.classList.remove('show'); await loadMe(); await loadListings();
+    };
+  } else {
+    document.getElementById('authTitle').textContent = isReg?'新規登録':'ログイン';
+    document.getElementById('extraFields').style.display = isReg?'':'none';
+  }
+  document.getElementById('modalAuth').classList.add('show');
+}
+
+// Upload to Cloudinary
+document.addEventListener('click',e=>{ if(e.target && e.target.id==='btnUpload'){ uploadImg(); } });
+async function uploadImg(){
+  const f=document.getElementById('file').files[0]; if(!f) return alert('画像選択してね');
+  const fd=new FormData(); fd.append('file',f); fd.append('upload_preset',UPLOAD_PRESET);
+  const r=await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,{method:'POST',body:fd});
+  const j=await r.json(); if(!j.secure_url){console.log(j);return alert('アップロード失敗');}
+  const img=document.getElementById('preview'); img.src=j.secure_url; img.style.display='block';
+}
+
+document.getElementById('btnCreate').onclick=async()=>{
+  if(!me) return alert('ログインしてください');
+  const body={ title:$('#title').value, price_per_week:Number($('#price').value||0), condition:$('#condition').value, description:$('#description').value, category:$('#category').value, image_url:$('#preview').src||null };
+  await fetchJSON('/api/listings',{method:'POST',body:JSON.stringify(body)});
+  $('#title').value='';$('#price').value='';$('#condition').value='';$('#description').value='';$('#category').value='';$('#preview').style.display='none';
+  await loadListings();
+};
+
+// Nav
+document.getElementById('navHome').onclick=()=>{ showPage('pageHome'); };
+document.getElementById('navInbox').onclick=async()=>{ if(!me) return alert('ログインしてね'); showPage('pageInbox'); await loadInbox(); };
+
+document.getElementById('btnSearch').onclick=loadListings;
+
+(async function init(){ await loadMe(); await loadListings(); })();
+</script>
+</body>
+</html>
